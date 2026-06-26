@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>混凝土工程用量与调度系统</title>
+    <meta
+      name="description"
+      content="混凝土工程用量统计、施工填报、调度分配与工程量计算的分岗协同网站。"
+    />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:title" content="混凝土工程用量与调度系统" />
+    <meta
+      property="og:description"
+      content="用于混凝土工程的用量统计、调度排产、车辆分配和工程量计算。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./assets/concrete-operations.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="角色导航">
+        <div class="brand">
+          <div class="brand-mark">砼</div>
+          <div>
+            <strong>砼量调度台</strong>
+            <span>Concrete Ops</span>
+          </div>
+        </div>
+
+        <nav class="role-nav">
+          <button class="role-tab active" data-role="dashboard">
+            <span>总览</span>
+            <small>用量 / 缺口 / 运力</small>
+          </button>
+          <button class="role-tab" data-role="worker">
+            <span>施工使用者</span>
+            <small>现场浇筑用量填报</small>
+          </button>
+          <button class="role-tab" data-role="dispatcher">
+            <span>调度分配者</span>
+            <small>车辆 / 泵车 / 班组分配</small>
+          </button>
+          <button class="role-tab" data-role="calculator">
+            <span>工程量计算者</span>
+            <small>构件体积与损耗计算</small>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span>本地保存</span>
+          <strong id="saveState">已同步</strong>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div class="hero">
+            <img src="./assets/concrete-operations.png" alt="混凝土工程现场" />
+            <div class="hero-overlay">
+              <p>混凝土工程管理</p>
+              <h1>用量统计、调度分配、工程量计算分岗协同</h1>
+            </div>
+          </div>
+
+          <section class="quick-stats" aria-label="关键指标">
+            <div class="metric">
+              <span>今日已用</span>
+              <strong id="todayUsed">0 m3</strong>
+            </div>
+            <div class="metric">
+              <span>待调度</span>
+              <strong id="pendingVolume">0 m3</strong>
+            </div>
+            <div class="metric">
+              <span>已排产</span>
+              <strong id="scheduledVolume">0 m3</strong>
+            </div>
+            <div class="metric">
+              <span>缺口</span>
+              <strong id="gapVolume">0 m3</strong>
+            </div>
+          </section>
+        </header>
+
+        <section class="search-panel" aria-labelledby="searchTitle">
+          <div>
+            <p class="eyebrow">Search</p>
+            <h2 id="searchTitle">全站搜索</h2>
+          </div>
+          <label class="search-box">
+            <span>搜索项目、部位、强度等级、人员、车辆或状态</span>
+            <input id="globalSearch" type="search" placeholder="例如：A区 C30 泵车 P-01 张工" autocomplete="off" />
+          </label>
+          <div class="search-results" id="searchResults" aria-live="polite"></div>
+        </section>
+
+        <section class="view active" id="dashboard" aria-labelledby="dashboardTitle">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Operations Board</p>
+              <h2 id="dashboardTitle">工程总览</h2>
+            </div>
+            <div class="action-row">
+              <button class="icon-button" id="exportBtn" title="导出数据" aria-label="导出数据">↓</button>
+              <button class="icon-button" id="resetBtn" title="恢复示例数据" aria-label="恢复示例数据">↻</button>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>近七日浇筑趋势</h3>
+                <span id="trendTotal">0 m3</span>
+              </div>
+              <canvas id="usageChart" width="760" height="260" aria-label="近七日浇筑趋势图"></canvas>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>强度等级占比</h3>
+                <span id="gradeCount">0 类</span>
+              </div>
+              <div class="grade-list" id="gradeBreakdown"></div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-head">
+                <h3>调度队列</h3>
+                <span id="queueCount">0 单</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>时间</th>
+                      <th>项目</th>
+                      <th>部位</th>
+                      <th>方量</th>
+                      <th>车辆</th>
+                      <th>泵车</th>
+                      <th>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dispatchTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="worker" aria-labelledby="workerTitle">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Field Usage</p>
+              <h2 id="workerTitle">施工使用者</h2>
+            </div>
+            <span class="role-badge">只填报实际使用量</span>
+          </div>
+
+          <div class="work-grid">
+            <form class="panel form-panel" id="usageForm">
+              <h3>浇筑用量记录</h3>
+              <label>
+                项目名称
+                <input name="project" required value="A区主体结构" />
+              </label>
+              <label>
+                浇筑部位
+                <input name="location" required placeholder="如：3F 梁板" />
+              </label>
+              <div class="field-row">
+                <label>
+                  强度等级
+                  <select name="grade">
+                    <option>C25</option>
+                    <option selected>C30</option>
+                    <option>C35</option>
+                    <option>C40</option>
+                    <option>C50</option>
+                  </select>
+                </label>
+                <label>
+                  实用方量 m3
+                  <input name="volume" type="number" min="0" step="0.1" required />
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  坍落度 mm
+                  <input name="slump" type="number" min="0" step="5" value="180" />
+                </label>
+                <label>
+                  浇筑日期
+                  <input name="date" type="date" required />
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  班次
+                  <select name="shift">
+                    <option>白班</option>
+                    <option>夜班</option>
+                  </select>
+                </label>
+                <label>
+                  填报人
+                  <input name="worker" required placeholder="现场负责人" />
+                </label>
+              </div>
+              <button class="primary-btn" type="submit">登记用量</button>
+            </form>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>最近用量</h3>
+                <span id="usageCount">0 条</span>
+              </div>
+              <div class="record-list" id="usageList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="dispatcher" aria-labelledby="dispatcherTitle">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Dispatch</p>
+              <h2 id="dispatcherTitle">调度分配者</h2>
+            </div>
+            <span class="role-badge">只处理排产与资源分配</span>
+          </div>
+
+          <div class="work-grid">
+            <form class="panel form-panel" id="scheduleForm">
+              <h3>新增调度计划</h3>
+              <label>
+                关联需求
+                <select name="demandId" id="demandSelect"></select>
+              </label>
+              <div class="field-row">
+                <label>
+                  计划时间
+                  <input name="time" type="datetime-local" required />
+                </label>
+                <label>
+                  计划方量 m3
+                  <input name="volume" type="number" min="0" step="0.1" required />
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  搅拌车
+                  <input name="trucks" type="number" min="1" step="1" value="4" />
+                </label>
+                <label>
+                  泵车编号
+                  <select name="pump">
+                    <option>泵车 P-01</option>
+                    <option>泵车 P-02</option>
+                    <option>地泵 G-01</option>
+                    <option>汽车泵 AP-03</option>
+                  </select>
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  班组
+                  <select name="crew">
+                    <option>一号浇筑班</option>
+                    <option>二号浇筑班</option>
+                    <option>夜间保障班</option>
+                  </select>
+                </label>
+                <label>
+                  状态
+                  <select name="status">
+                    <option>待出车</option>
+                    <option>运输中</option>
+                    <option>浇筑中</option>
+                    <option>已完成</option>
+                  </select>
+                </label>
+              </div>
+              <button class="primary-btn" type="submit">加入调度</button>
+            </form>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>待分配需求</h3>
+                <span id="demandCount">0 项</span>
+              </div>
+              <div class="record-list compact" id="demandList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="calculator" aria-labelledby="calculatorTitle">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Quantity</p>
+              <h2 id="calculatorTitle">工程量计算者</h2>
+            </div>
+            <span class="role-badge">只计算理论需求量</span>
+          </div>
+
+          <div class="work-grid">
+            <form class="panel form-panel" id="quantityForm">
+              <h3>构件工程量计算</h3>
+              <label>
+                项目名称
+                <input name="project" required value="A区主体结构" />
+              </label>
+              <label>
+                构件部位
+                <input name="location" required placeholder="如：4F 剪力墙 W12" />
+              </label>
+              <div class="field-row">
+                <label>
+                  构件类型
+                  <select name="type" id="typeSelect">
+                    <option value="slab">板：长 × 宽 × 厚</option>
+                    <option value="beam">梁：长 × 宽 × 高</option>
+                    <option value="column">柱：长 × 宽 × 高 × 根数</option>
+                    <option value="wall">墙：长 × 高 × 厚</option>
+                    <option value="pile">桩：π × r² × 深 × 根数</option>
+                  </select>
+                </label>
+                <label>
+                  强度等级
+                  <select name="grade">
+                    <option>C25</option>
+                    <option selected>C30</option>
+                    <option>C35</option>
+                    <option>C40</option>
+                    <option>C50</option>
+                  </select>
+                </label>
+              </div>
+              <div class="dimension-grid">
+                <label>
+                  长 / 深 m
+                  <input name="length" type="number" min="0" step="0.01" value="12" />
+                </label>
+                <label>
+                  宽 / 半径 m
+                  <input name="width" type="number" min="0" step="0.01" value="4.2" />
+                </label>
+                <label>
+                  高 / 厚 m
+                  <input name="height" type="number" min="0" step="0.01" value="0.12" />
+                </label>
+                <label>
+                  数量
+                  <input name="count" type="number" min="1" step="1" value="1" />
+                </label>
+                <label>
+                  损耗 %
+                  <input name="waste" type="number" min="0" step="0.1" value="2" />
+                </label>
+                <label>
+                  计算人
+                  <input name="calculator" required placeholder="预算/技术负责人" />
+                </label>
+              </div>
+              <div class="result-strip">
+                <span>理论方量</span>
+                <strong id="calcResult">0.00 m3</strong>
+              </div>
+              <button class="primary-btn" type="submit">生成需求单</button>
+            </form>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>工程量需求</h3>
+                <span id="quantityCount">0 条</span>
+              </div>
+              <div class="record-list" id="quantityList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">暂无数据</div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
